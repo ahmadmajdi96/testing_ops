@@ -1,0 +1,32 @@
+name: CI/CD Sample App
+on:
+  push:
+    branches: [main, prod]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Log in to Docker
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build & push image
+        run: |
+          IMAGE=REGISTRY/sample-app:${{ github.sha }}
+          docker build -t $IMAGE ./services/sample-app
+          docker push $IMAGE
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+      - name: Update dev overlay
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git clone https://github.com/ahmadmajdi96/gitops-configs.git
+          cd gitops-configs/dev/sample-app
+          sed -i "s|image: .*|image: $IMAGE|" deployment.yaml
+          git config user.name "Ahmad Salameh"
+          git config user.email "ahmad.majdi96@gmail.com"
+          git add deployment.yaml
+          git commit -m "Update dev sample-app $IMAGE" || echo "no changes"
+          git push https://ahmadmajdi96:${{ secrets.GH_PAT }}@github.com/ahmadmajdi96/gitops-configs.git main
